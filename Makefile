@@ -1,11 +1,14 @@
-all: dist/router.es6.js dist/router.common.js dist/router.amd.js
+all: dist/system/router.js dist/commonjs/router.js dist/amd/router.js dist/es6/router.js
 
-dist/router.es6.js: src/router.ts dist/router.common.js
-	tsc $< --outFile $@ --target es6 --module system
+dist/system/router.js: src/router.ts
+	tsc $< --outDir $(dir $@) --target es6 --module system
 
-dist/router.common.js: src/router.ts
+dist/commonjs/router.js: src/router.ts
 	tsc $< --outDir $(dir $@) --target es6 --module CommonJS
-	mv $(dir $@)router.js $@
 
-dist/router.amd.js: src/router.ts
-	tsc $< --outFile $@ --target es6 --module amd
+dist/amd/router.js: src/router.ts
+	tsc $< --outDir $(dir $@) --target es6 --module amd
+
+dist/es6/router.js: src/router.ts
+	tsc $< --outDir $(dir $@) --target es6
+

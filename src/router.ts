@@ -8,17 +8,28 @@ export class Route {
 	}
 }
 
-class Router {
+export enum RouterMode {
+	History,
+	Hash
+}
+
+export class Router extends EventTarget {
 	routes: Route[] = [];
 	root: string = "/";
 	lastPath = "";
+	mode: RouterMode;
 
-	constructor(root: string) {
-		if (root) {
-			this.root = this.normalizePath(root);
+	constructor(mode: RouterMode = RouterMode.History, root: string = "/") {
+		super();
+
+		this.root = this.normalizePath(root);
+		this.mode = mode;
+
+		if (this.mode == RouterMode.History) {
+			window.addEventListener("popstate", (_: Event) => this.run());
+		} else if (this.mode == RouterMode.Hash) {
+			window.addEventListener("hashchange", (_: Event) => this.run());
 		}
-
-		window.addEventListener("popstate", (_: Event) => this.run());
 	}
 
 	add(path: string, callback: CallableFunction): void {
@@ -37,26 +48,61 @@ class Router {
 	}
 
 	navigate(path: string): void {
-		window.history.pushState(null, null, this.normalizePath(`${this.root}/${path}`));
+		if (this.mode == RouterMode.History) {
+			window.history.pushState(null, null, this.normalizePath(`${this.root}/${path}`));
+		} else if (this.mode == RouterMode.Hash) {
+			window.location.hash = this.normalizePath(path);
+		}
+		
 		this.run();
 	}
 
-	run() {
+	run(): void {
+		if (this.mode == RouterMode.Hash && window.location.hash == "") {
+			this.navigate("/");
+		}
+
 		let current = this.getCurrentPath();
 		if (this.lastPath == current) return;
-		this.routes.some((route: Route) => this.checkAndRun(route));
+		let routeFound = this.routes.some((route: Route) => this.checkAndRun(route, current));
 		this.lastPath = current;
+
+		if (!routeFound) {
+			this.dispatchEvent(new Event("notfound"));
+		}
 	}
 
-	checkAndRun(route: Route) {
-		let path = this.getCurrentPath();
-
+	checkAndRun(route: Route, path: string): boolean {
 		if (route.path == path) {
 			route.callback();
 			return true;
 		}
 
-		return false;
+		let pathSegments = this.getPathSegments(path);
+		let routeSegments = this.getPathSegments(route.path);
+		let args = new Map<string, string>();
+
+		if (pathSegments.length != routeSegments.length) return false;
+
+		for (let i = 0; i < pathSegments.length; ++i) {
+			let ps = pathSegments[i];
+			let rs = routeSegments[i];
+
+			console.log(`ps: ${ps} | rs: ${rs}`);
+
+			if (ps == rs) continue;
+
+			if (rs.startsWith(":")) {
+				let argName = rs.substr(1);
+				args.set(argName, ps);
+				console.log(args);
+			} else {
+				return false;
+			}
+		}
+
+		route.callback(args);
+		return true;
 	}
 
 	normalizePath(path: string): string {
@@ -83,11 +129,23 @@ class Router {
 		return `/${n}`;
 	}
 
-	getCurrentPath() {
-		let path = this.normalizePath(decodeURI(window.location.pathname + window.location.search));
+	getPathSegments(path: string): string[] {
+		let segments = this.normalizePath(path).substr(1).split("/");
+		return segments;
+	}
 
-		if (this.root != "/" && path.startsWith(this.root)) {
-			path = this.normalizePath(path.substr(0, this.root.length));
+	getCurrentPath(): string {
+		let path = "/";
+		
+		if (this.mode == RouterMode.History) {
+			path = this.normalizePath(decodeURI(window.location.pathname + window.location.search));
+
+			if (this.root != "/" && path.startsWith(this.root)) {
+				path = this.normalizePath(path.substr(0, this.root.length));
+			}
+		} else if (this.mode == RouterMode.Hash) {
+			if (window.location.hash == "") return "/";
+			path = this.normalizePath(decodeURI(window.location.hash.substr(1)));
 		}
 
 		return path;

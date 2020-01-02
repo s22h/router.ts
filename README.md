@@ -1,6 +1,5 @@
 # Frontend router
 
-A simple frontend router written in Typescript. It uses history.push and the 
-PopState event to handle navigation.
+A simple frontend router written in Typescript. It uses the History API or window.location.hash to handle navigation.
 
-Examples can be found in the [examples/ folder](examples/)
+Examples can be found in the [example/](examples/) folder.

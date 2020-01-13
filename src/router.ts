@@ -19,9 +19,9 @@ export class Router extends EventTarget {
 	lastPath = "";
 	mode: RouterMode;
 
-	constructor(mode: RouterMode = RouterMode.History, root: string = "/") {
+	constructor(mode: RouterMode = RouterMode.History, root: string = window.location.pathname) {
 		super();
-
+		
 		this.root = this.normalizePath(root);
 		this.mode = mode;
 
@@ -57,6 +57,34 @@ export class Router extends EventTarget {
 		this.run();
 	}
 
+	link(path: string, urlOnly: boolean = false): string {
+		let url: string = "";
+
+		if (this.mode == RouterMode.Hash) {
+			let root = this.root;
+			if (this.root != "/") root += "/";
+			url = `${root}#${this.normalizePath(path)}`;
+		} else if (this.mode == RouterMode.History) {
+			url = this.normalizePath(`${this.root}/${path}`);
+		}
+
+		if (urlOnly) return url;
+
+		return `href="${url}" rel="router"`;
+	}
+
+	handleLink(e: Event): void {
+		e.preventDefault();
+
+		let path = (e.target as HTMLAnchorElement).href;
+
+		if (this.root != "/" && path.startsWith(this.root)) {
+			path = this.normalizePath(path.substr(0, this.root.length));
+		}
+
+		this.navigate(path);
+	}
+
 	run(): void {
 		if (this.mode == RouterMode.Hash && window.location.hash == "") {
 			this.navigate("/");
@@ -66,6 +94,12 @@ export class Router extends EventTarget {
 		if (this.lastPath == current) return;
 		let routeFound = this.routes.some((route: Route) => this.checkAndRun(route, current));
 		this.lastPath = current;
+
+		if (this.mode == RouterMode.History) {
+			document.querySelectorAll("a[rel=\"router\"]").forEach((e: HTMLAnchorElement) => {
+				e.addEventListener("click", this.handleLink.bind(this));
+			});
+		}
 
 		if (!routeFound) {
 			this.dispatchEvent(new Event("notfound"));
@@ -88,14 +122,11 @@ export class Router extends EventTarget {
 			let ps = pathSegments[i];
 			let rs = routeSegments[i];
 
-			console.log(`ps: ${ps} | rs: ${rs}`);
-
 			if (ps == rs) continue;
 
 			if (rs.startsWith(":")) {
 				let argName = rs.substr(1);
 				args.set(argName, ps);
-				console.log(args);
 			} else {
 				return false;
 			}

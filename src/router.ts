@@ -13,16 +13,22 @@ export enum RouterMode {
 	Hash
 }
 
-export class Router extends EventTarget {
+export class RouterOptions {
+	root = window.location.pathname;
+	removeDomain = true;
+}
+
+class Router extends EventTarget {
 	routes: Route[] = [];
-	root: string = "/";
+	options: RouterOptions;
 	lastPath = "";
 	mode: RouterMode;
 
-	constructor(mode: RouterMode = RouterMode.History, root: string = window.location.pathname) {
+	constructor(mode: RouterMode = RouterMode.History, options: RouterOptions = new RouterOptions()) {
 		super();
 		
-		this.root = this.normalizePath(root);
+		this.options = options;
+		this.options.root = this.normalizePath(this.options.root);
 		this.mode = mode;
 
 		if (this.mode == RouterMode.History) {
@@ -49,7 +55,7 @@ export class Router extends EventTarget {
 
 	navigate(path: string): void {
 		if (this.mode == RouterMode.History) {
-			window.history.pushState(null, null, this.normalizePath(`${this.root}/${path}`));
+			window.history.pushState(null, "", this.normalizePath(`${this.options.root}/${path}`));
 		} else if (this.mode == RouterMode.Hash) {
 			window.location.hash = this.normalizePath(path);
 		}
@@ -61,11 +67,11 @@ export class Router extends EventTarget {
 		let url: string = "";
 
 		if (this.mode == RouterMode.Hash) {
-			let root = this.root;
-			if (this.root != "/") root += "/";
+			let root = this.options.root;
+			if (this.options.root != "/") root += "/";
 			url = `${root}#${this.normalizePath(path)}`;
 		} else if (this.mode == RouterMode.History) {
-			url = this.normalizePath(`${this.root}/${path}`);
+			url = this.normalizePath(`${this.options.root}/${path}`);
 		}
 
 		if (urlOnly) return url;
@@ -78,8 +84,16 @@ export class Router extends EventTarget {
 
 		let path = (e.target as HTMLAnchorElement).href;
 
-		if (this.root != "/" && path.startsWith(this.root)) {
-			path = this.normalizePath(path.substr(0, this.root.length));
+		if (this.options.removeDomain) {
+			let base = `${window.location.protocol}//${window.location.host}`;
+
+			if (path.startsWith(base)) {
+				path = path.substr(base.length);
+			}
+		}
+
+		if (this.options.root != "/" && path.startsWith(this.options.root)) {
+			path = this.normalizePath(path.substr(this.options.root.length));
 		}
 
 		this.navigate(path);
@@ -95,11 +109,9 @@ export class Router extends EventTarget {
 		let routeFound = this.routes.some((route: Route) => this.checkAndRun(route, current));
 		this.lastPath = current;
 
-		if (this.mode == RouterMode.History) {
-			document.querySelectorAll("a[rel=\"router\"]").forEach((e: HTMLAnchorElement) => {
-				e.addEventListener("click", this.handleLink.bind(this));
-			});
-		}
+		document.querySelectorAll("a[rel=\"router\"]").forEach((e: Element) => {
+			(e as HTMLAnchorElement).addEventListener("click", this.handleLink.bind(this));
+		});
 
 		if (!routeFound) {
 			this.dispatchEvent(new Event("notfound"));
@@ -115,6 +127,8 @@ export class Router extends EventTarget {
 		let pathSegments = this.getPathSegments(path);
 		let routeSegments = this.getPathSegments(route.path);
 		let args = new Map<string, string>();
+
+		console.log(pathSegments, routeSegments);
 
 		if (pathSegments.length != routeSegments.length) return false;
 
@@ -171,8 +185,8 @@ export class Router extends EventTarget {
 		if (this.mode == RouterMode.History) {
 			path = this.normalizePath(decodeURI(window.location.pathname + window.location.search));
 
-			if (this.root != "/" && path.startsWith(this.root)) {
-				path = this.normalizePath(path.substr(0, this.root.length));
+			if (this.options.root != "/" && path.startsWith(this.options.root)) {
+				path = this.normalizePath(path.substr(this.options.root.length));
 			}
 		} else if (this.mode == RouterMode.Hash) {
 			if (window.location.hash == "") return "/";

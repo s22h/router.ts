@@ -9,13 +9,21 @@ export var RouterMode;
     RouterMode[RouterMode["History"] = 0] = "History";
     RouterMode[RouterMode["Hash"] = 1] = "Hash";
 })(RouterMode || (RouterMode = {}));
-export class Router extends EventTarget {
-    constructor(mode = RouterMode.History, root = "/") {
+export class RouterOptions {
+    constructor() {
+        this.root = window.location.pathname;
+        this.removeDomain = true;
+        this.preCallback = null;
+        this.postCallback = null;
+    }
+}
+class Router extends EventTarget {
+    constructor(mode = RouterMode.History, options = new RouterOptions()) {
         super();
         this.routes = [];
-        this.root = "/";
         this.lastPath = "";
-        this.root = this.normalizePath(root);
+        this.options = options;
+        this.options.root = this.normalizePath(this.options.root);
         this.mode = mode;
         if (this.mode == RouterMode.History) {
             window.addEventListener("popstate", (_) => this.run());
@@ -38,12 +46,41 @@ export class Router extends EventTarget {
     }
     navigate(path) {
         if (this.mode == RouterMode.History) {
-            window.history.pushState(null, null, this.normalizePath(`${this.root}/${path}`));
+            window.history.pushState(null, "", this.normalizePath(`${this.options.root}/${path}`));
         }
         else if (this.mode == RouterMode.Hash) {
             window.location.hash = this.normalizePath(path);
         }
         this.run();
+    }
+    link(path, urlOnly = false) {
+        let url = "";
+        if (this.mode == RouterMode.Hash) {
+            let root = this.options.root;
+            if (this.options.root != "/")
+                root += "/";
+            url = `${root}#${this.normalizePath(path)}`;
+        }
+        else if (this.mode == RouterMode.History) {
+            url = this.normalizePath(`${this.options.root}/${path}`);
+        }
+        if (urlOnly)
+            return url;
+        return `href="${url}" rel="router"`;
+    }
+    handleLink(e) {
+        e.preventDefault();
+        let path = e.target.href;
+        if (this.options.removeDomain) {
+            let base = `${window.location.protocol}//${window.location.host}`;
+            if (path.startsWith(base)) {
+                path = path.substr(base.length);
+            }
+        }
+        if (this.options.root != "/" && path.startsWith(this.options.root)) {
+            path = this.normalizePath(path.substr(this.options.root.length));
+        }
+        this.navigate(path);
     }
     run() {
         if (this.mode == RouterMode.Hash && window.location.hash == "") {
@@ -54,13 +91,16 @@ export class Router extends EventTarget {
             return;
         let routeFound = this.routes.some((route) => this.checkAndRun(route, current));
         this.lastPath = current;
+        document.querySelectorAll("a[rel=\"router\"]").forEach((e) => {
+            e.addEventListener("click", this.handleLink.bind(this));
+        });
         if (!routeFound) {
             this.dispatchEvent(new Event("notfound"));
         }
     }
     checkAndRun(route, path) {
         if (route.path == path) {
-            route.callback();
+            this.callRoute(route, path);
             return true;
         }
         let pathSegments = this.getPathSegments(path);
@@ -71,20 +111,29 @@ export class Router extends EventTarget {
         for (let i = 0; i < pathSegments.length; ++i) {
             let ps = pathSegments[i];
             let rs = routeSegments[i];
-            console.log(`ps: ${ps} | rs: ${rs}`);
             if (ps == rs)
                 continue;
             if (rs.startsWith(":")) {
                 let argName = rs.substr(1);
                 args.set(argName, ps);
-                console.log(args);
             }
             else {
                 return false;
             }
         }
-        route.callback(args);
+        this.callRoute(route, path, args);
         return true;
+    }
+    callRoute(route, url, args) {
+        if (this.options.preCallback) {
+            if (this.options.preCallback(this, route, url, args) === false) {
+                return;
+            }
+        }
+        route.callback(args, route, this);
+        if (this.options.postCallback) {
+            this.options.preCallback(this, route, url, args);
+        }
     }
     normalizePath(path) {
         if (path.trim() == "/")
@@ -116,8 +165,8 @@ export class Router extends EventTarget {
         let path = "/";
         if (this.mode == RouterMode.History) {
             path = this.normalizePath(decodeURI(window.location.pathname + window.location.search));
-            if (this.root != "/" && path.startsWith(this.root)) {
-                path = this.normalizePath(path.substr(0, this.root.length));
+            if (this.options.root != "/" && path.startsWith(this.options.root)) {
+                path = this.normalizePath(path.substr(this.options.root.length));
             }
         }
         else if (this.mode == RouterMode.Hash) {

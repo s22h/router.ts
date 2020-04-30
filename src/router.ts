@@ -16,6 +16,8 @@ export enum RouterMode {
 export class RouterOptions {
 	root = window.location.pathname;
 	removeDomain = true;
+	preCallback: CallableFunction = null;
+	postCallback: CallableFunction = null;
 }
 
 class Router extends EventTarget {
@@ -120,15 +122,13 @@ class Router extends EventTarget {
 
 	checkAndRun(route: Route, path: string): boolean {
 		if (route.path == path) {
-			route.callback();
+			this.callRoute(route, path);
 			return true;
 		}
 
 		let pathSegments = this.getPathSegments(path);
 		let routeSegments = this.getPathSegments(route.path);
 		let args = new Map<string, string>();
-
-		console.log(pathSegments, routeSegments);
 
 		if (pathSegments.length != routeSegments.length) return false;
 
@@ -146,8 +146,22 @@ class Router extends EventTarget {
 			}
 		}
 
-		route.callback(args);
+		this.callRoute(route, path, args);
 		return true;
+	}
+
+	callRoute(route: Route, url: String, args?: Map<string, string>) {
+		if (this.options.preCallback) {
+			if (this.options.preCallback(this, route, url, args) === false) {
+				return;
+			}
+		}
+
+		route.callback(args, route, this);
+		
+		if (this.options.postCallback) {
+			this.options.preCallback(this, route, url, args);
+		}
 	}
 
 	normalizePath(path: string): string {

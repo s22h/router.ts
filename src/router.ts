@@ -16,8 +16,8 @@ export enum RouterMode {
 export class RouterOptions {
 	root = window.location.pathname;
 	removeDomain = true;
-	preCallback: CallableFunction = null;
-	postCallback: CallableFunction = null;
+	preCallback?: CallableFunction;
+	postCallback?: CallableFunction;
 }
 
 class Router extends EventTarget {
@@ -160,7 +160,7 @@ class Router extends EventTarget {
 		route.callback(args, route, this);
 		
 		if (this.options.postCallback) {
-			this.options.preCallback(this, route, url, args);
+			this.options.postCallback(this, route, url, args);
 		}
 	}
 
